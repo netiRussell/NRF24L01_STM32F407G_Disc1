@@ -1,0 +1,11 @@
+**/.DS_Store
+.cproject
+.mxproject
+.project
+/.settings
+/Docs
+NRF24L01_STM32F407G_Disc1.ioc
+STM32F407VGTX_FLASH.ld
+STM32F407VGTX_RAM.ld
+/Drivers/STM32F4xx_HAL_Driver
+/Drivers/CMSIS/
