@@ -15,8 +15,8 @@ Driver with Interrupt handling for the STM32F407G-Disc1 board
 - PA5: SPI1 SCLK
 - PA6: SPI1 MISO
 - PA7: SPI1 MOSI
-- PA4: CE
-- PA5: NSS
+- PC4: CE
+- PC5: NSS
 - PB0: IRQ
 ### Power
 - 3.3V DC
