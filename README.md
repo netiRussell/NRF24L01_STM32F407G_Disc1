@@ -18,6 +18,7 @@ Driver with Interrupt handling for the STM32F407G-Disc1 board
 - PC4: CE
 - PC5: NSS
 - PB0: IRQ
+(These can be modified in the header file: nrf24l01p.h)
 ### Power
 - 3.3V DC
 - Common ground
