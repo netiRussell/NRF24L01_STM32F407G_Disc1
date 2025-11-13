@@ -7,10 +7,57 @@
 #include <stdint.h>
 
 
+
+/* ----------------------------------------------------------- */
+/* ----------------------- Structures ------------------------ */
+/* ----------------------------------------------------------- */
+typedef struct {
+  uint8_t rx_iqr;         // @NRF24_REG_CONFIG_MASK_xx_Val
+  uint8_t tx_iqr;         // @NRF24_REG_CONFIG_MASK_xx_Val
+  uint8_t max_rt_iqr;     // @NRF24_REG_CONFIG_MASK_xx_Val
+  uint8_t en_crc;         // @NRF24_REG_CONFIG_EN_CRC_Val
+  uint8_t mode;           // @NRF24_REG_CONFIG_PRIM_RX_Val
+
+  uint8_t address_width;  // @NRF24_REG_SETUP_AW_Val
+
+  uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() [TX-specific]
+  uint8_t arc;            // Value between 0 and 15                                 [TX-specific]
+
+  uint8_t rf_chl;         // 6 bits(0-63) frequency channel
+
+  /* RF_SETUP is suggested to have default for everything
+  beside rf_pwr and dr_high which can be set to maximum */
+  uint8_t rf_pwr;         // @NRF24_REG_RF_SETUP_RF_PWR_Val
+  uint8_t dr_high;     // @NRF24_REG_RF_SETUP_RF_DR_HIGH_Val
+  uint8_t pll_lock;       // @NRF24_REG_RF_SETUP_PLL_LOCK_Val                       [FOR TESTING-ONLY]
+  uint8_t dr_low;         // @NRF24_REG_RF_SETUP_RF_DR_LOW_Val
+  uint8_t count_wave;     // @NRF24_REG_RF_SETUP_CONT_WAVE_Val
+} nrf24_config_t;
+
+
+
+
+/* ----------------------------------------------------------- */
+/* ---------------- Functions declarations ------------------- */
+/* ----------------------------------------------------------- */
+void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size );
+void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size );
+void nrf24_sendStandaloneCmd( uint8_t cmd );
+void nrf24_Init( nrf24_config_t* nrf24_config );
+
+
+
 /* ----------------------------------------------------------- */
 /* ------------------------ General -------------------------- */
 /* ----------------------------------------------------------- */
 #define NRF24_USE_ASSERTS
+
+// Redundant copy of HAL macros
+#define GPIO_PIN_RESET  0b0u
+#define GPIO_PIN_SET    0b1u
+
+#define FALSE           0b0u
+#define TRUE            0b1u
 
 
 /* ----------------------------------------------------------- */
@@ -39,11 +86,24 @@ extern SPI_HandleTypeDef hspi1;
 
 
 
-
 /* ----------------------------------------------------------- */
 /* ------------------ Macros for Registers ------------------- */
 /* - Addresses 0x18–0x1B are reserved for test; do not touch - */
 /* ----------------------------------------------------------- */
+
+/* ---------------- Instruction Mnemonics ---------------- */
+#define R_REGISTER    0x00
+#define W_REGISTER    0x20
+#define REGISTER_MASK 0x1F
+#define ACTIVATE      0x50
+#define R_RX_PL_WID   0x60
+#define R_RX_PAYLOAD  0x61
+#define W_TX_PAYLOAD  0xA0
+#define W_ACK_PAYLOAD 0xA8
+#define FLUSH_TX      0xE1
+#define FLUSH_RX      0xE2
+#define REUSE_TX_PL   0xE3
+#define NOP           0xFF
 
 /* ---------------- Register Addresses ---------------- */
 #define NRF24_REG_CONFIG              0x00
@@ -81,23 +141,26 @@ extern SPI_HandleTypeDef hspi1;
 #define NRF24_REG_CONFIG_PWR_UP_Pos       1
 #define NRF24_REG_CONFIG_CRCO_Pos         2
 #define NRF24_REG_CONFIG_EN_CRC_Pos       3
-#define NRF24_CONFIG_MASK_MAX_RT_Pos      4
-#define NRF24_CONFIG_MASK_TX_DS_Pos       5
-#define NRF24_CONFIG_MASK_RX_DR_Pos       6
+#define NRF24_REG_CONFIG_MASK_MAX_RT_Pos  4
+#define NRF24_REG_CONFIG_MASK_TX_DS_Pos   5
+#define NRF24_REG_CONFIG_MASK_RX_DR_Pos   6
 /* bit7 reserved */
 
 // Values  
-#define NRF24_REG_CONFIG_PRIM_RX_Val_PRX      1u
-#define NRF24_REG_CONFIG_PRIM_RX_Val_PTX      0u
+#define NRF24_REG_CONFIG_PRIM_RX_Val_PRX      0b1u
+#define NRF24_REG_CONFIG_PRIM_RX_Val_PTX      0b0u
 
-#define NRF24_REG_CONFIG_PWR_UP_Val_UP        1u
-#define NRF24_REG_CONFIG_PWR_UP_Val_DOWN      0u
+#define NRF24_REG_CONFIG_PWR_UP_Val_UP        0b1u
+#define NRF24_REG_CONFIG_PWR_UP_Val_DOWN      0b0u
 
-#define NRF24_REG_CONFIG_CRCO_Val_BYTE        0u
-#define NRF24_REG_CONFIG_CRCO_Val_2BYTES      1u
+#define NRF24_REG_CONFIG_CRCO_Val_BYTE        0b0u
+#define NRF24_REG_CONFIG_CRCO_Val_2BYTES      0b1u
 
-#define NRF24_CONFIG_MASK_xx_Val_IQR_ENABLE   0u
-#define NRF24_CONFIG_MASK_xx_Val_IQR_DISABLE  1u
+#define NRF24_REG_CONFIG_EN_CRC_Val_DISABLE   0b0u
+#define NRF24_REG_CONFIG_EN_CRC_Val_ENABLE    0b1u
+
+#define NRF24_REG_CONFIG_MASK_xx_Val_IQR_ENABLE   0b0u
+#define NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE  0b1u
 
 /* ---------------- EN_AA (0x01) ---------------- */
 // Positions

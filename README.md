@@ -1,5 +1,5 @@
 # NRF24L01 
-Driver with Interrupt handling for the STM32F407G-Disc1 board
+Configurable driver with Interrupt handling, error handling, optional asserts for the STM32F407G-Disc1 board
 
 ## Initial setup
 ### Clock
@@ -22,3 +22,10 @@ Driver with Interrupt handling for the STM32F407G-Disc1 board
 ### Power
 - 3.3V DC
 - Common ground
+
+## Notes
+### RX
+- Pipe #0
+- Receiver Auto-Acknowledgement is enabled
+### TX
+- Transmitter Auto-Retransmission is enabled
