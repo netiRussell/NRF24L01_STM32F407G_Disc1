@@ -24,10 +24,10 @@ Configurable driver with Interrupt handling, error handling, optional asserts fo
 - Common ground
 
 ## Notes
+### ACKing
+- Auto-Acknowledgement can be enabled/disabled in the config struct
 ### RX
-- Pipe #0
-- Receiver Auto-Acknowledgement is enabled
+- Pipe can be specified in the config struct
 ### TX
-- Transmitter Auto
--
-Retransmission is enabled
+- ACKing address for the pipe#0 is provided
+- Retransmission count and delay when no ACK received can be specified in the config struct

@@ -20,16 +20,19 @@ typedef struct {
 
   uint8_t address_width;  // @NRF24_REG_SETUP_AW_Val
   uint8_t data_width;     // Number of data bytes expected on both RX and TX sides (max=255)
+  uint8_t en_aa;		  // @NRF24_REG_EN_AA_ENAA_Px_Val
 
-  uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() [TX-specific]
-  uint8_t arc;            // Value between 0 and 15                                 [TX-specific]
-  uint8_t tx_addr[5];     // TX address                                             [TX-specific]
+  uint8_t RX_pipe;		  // @NRF24_REG_EN_RXADDR_ERX_ [RX-specific]
+
+  uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() 										[TX-specific]
+  uint8_t arc;            // Values between 0 and 15, where 0 = no retransmission, 1 = 1 retr, 2 = 2 rets, ... 15 = 15 retr	[TX-specific]
+  uint8_t tx_addr[5];     // TX address                                             										[TX-specific]
 
   uint8_t rf_chl;         // 7 bits(0-127) frequency channel
 
   /* RF_SETUP is suggested to have default for everything
-  beside rf_pwr and dr_high which can be set to maximum */
-  uint8_t rf_pwr;         // @NRF24_REG_RF_SETUP_RF_PWR_Val
+  besides dr_high and pwr_val which can be set to maximum */
+  uint8_t rf_pwr;		  // @NRF24_REG_RF_SETUP_RF_PWR_Val
   uint8_t dr_high;        // @NRF24_REG_RF_SETUP_RF_DR_HIGH_Val
   uint8_t pll_lock;       // @NRF24_REG_RF_SETUP_PLL_LOCK_Val                       [FOR TESTING-ONLY]
   uint8_t dr_low;         // @NRF24_REG_RF_SETUP_RF_DR_LOW_Val
@@ -46,6 +49,7 @@ void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size );
 void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size );
 void nrf24_sendStandaloneCmd( uint8_t cmd );
 void nrf24_Init( nrf24_config_t* nrf24_config );
+uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data);
 
 
 
@@ -200,7 +204,7 @@ extern SPI_HandleTypeDef hspi1;
 /* 6 MSBs reserved */
 
 // Values 
-#define NRF24_REG_SETUP_AW_Val_ILLEGAL  0b00u
+#define NRF24_REG_SETUP_AW_Val_ILLEGAL  0b00u // Do not use, equal to misconfiguration
 #define NRF24_REG_SETUP_AW_Val_3BYTES   0b01u
 #define NRF24_REG_SETUP_AW_Val_4BYTES   0b10u
 #define NRF24_REG_SETUP_AW_Val_5BYTES   0b11u
@@ -215,8 +219,22 @@ extern SPI_HandleTypeDef hspi1;
 /* Number of re-transmits on fail can be set directly. 
 e.g., 3 = 3 re-transmits on fail. */
 #define NRF24_REG_SETUP_RETR_ARC_Val_DISABLE                        0b0000u
-
-#define NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us(value)  (int(value/250)-1)
+#define NRF24_REG_SETUP_RETR_ARD_Val_250microS    					0b0000u
+#define NRF24_REG_SETUP_RETR_ARD_Val_500microS    					0b0001u
+#define NRF24_REG_SETUP_RETR_ARD_Val_750microS    					0b0010u
+#define NRF24_REG_SETUP_RETR_ARD_Val_1000microS   					0b0011u
+#define NRF24_REG_SETUP_RETR_ARD_Val_1250microS   					0b0100u
+#define NRF24_REG_SETUP_RETR_ARD_Val_1500microS   					0b0101u
+#define NRF24_REG_SETUP_RETR_ARD_Val_1750microS   					0b0110u
+#define NRF24_REG_SETUP_RETR_ARD_Val_2000microS   					0b0111u
+#define NRF24_REG_SETUP_RETR_ARD_Val_2250microS   					0b1000u
+#define NRF24_REG_SETUP_RETR_ARD_Val_2500microS   					0b1001u
+#define NRF24_REG_SETUP_RETR_ARD_Val_2750microS   					0b1010u
+#define NRF24_REG_SETUP_RETR_ARD_Val_3000microS   					0b1011u
+#define NRF24_REG_SETUP_RETR_ARD_Val_3250microS   					0b1100u
+#define NRF24_REG_SETUP_RETR_ARD_Val_3500microS   					0b1101u
+#define NRF24_REG_SETUP_RETR_ARD_Val_3750microS   					0b1110u
+#define NRF24_REG_SETUP_RETR_ARD_Val_4000microS   					0b1111u
 
 
 /* ---------------- RF_CH (0x05) ---------------- */
@@ -239,17 +257,17 @@ e.g., 3 = 3 re-transmits on fail. */
 #define NRF24_REG_RF_SETUP_RF_PWR_Val_NEG6dBm                   0b10u
 #define NRF24_REG_RF_SETUP_RF_PWR_Val_0dBm                      0b11u
 
-#define NRF24_REG_RF_SETUP_RF_DR_HIGH_Val_1MBPS                 0b00u
+#define NRF24_REG_RF_SETUP_RF_DR_HIGH_Val_1MBPS                 0b00u // reset value
 #define NRF24_REG_RF_SETUP_RF_DR_HIGH_Val_2MBPS                 0b01u
 #define NRF24_REG_RF_SETUP_RF_DR_HIGH_Val_250KBPS               0b10u
 
-#define NRF24_REG_RF_SETUP_PLL_LOCK_Val_SET                     0b0u
-#define NRF24_REG_RF_SETUP_PLL_LOCK_Val_RESET                   0b1u
+#define NRF24_REG_RF_SETUP_PLL_LOCK_Val_RESET                   0b0u // reset value
+#define NRF24_REG_RF_SETUP_PLL_LOCK_Val_FORCE                   0b1u
 
-#define NRF24_REG_RF_SETUP_RF_DR_LOW_Val_RESET                  0b0u
+#define NRF24_REG_RF_SETUP_RF_DR_LOW_Val_RESET                  0b0u // reset value
 #define NRF24_REG_RF_SETUP_RF_DR_LOW_Val_SET                    0b1u
 
-#define NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE                0b0u
+#define NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE                0b0u // reset value
 #define NRF24_REG_RF_SETUP_CONT_WAVE_Val_ENABLE                 0b1u
 
 

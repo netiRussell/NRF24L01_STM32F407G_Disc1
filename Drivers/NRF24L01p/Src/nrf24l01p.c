@@ -163,6 +163,10 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	/* Initialize the variable that will hold the values to be written to the registers */
 	uint8_t holder = 0b0;
 
+	/* Ensure that the NSS pin is initially HIGH for the first SPI communication with NRF24 */
+	NSS_Deselect();
+	HAL_Delay(2);
+
 	/* Disable NRF24 before modifying its registers */
 	CE_Disable();
 
@@ -200,19 +204,21 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 
 	/* RX specific (only when the mode is RX) */
 	if( nrf24_config->mode ) {
-		/* RX pipes (only when the mode is RX) */
-
-		// Enable the pipe #0
-		holder = (uint8_t)(NRF24_REG_EN_AA_ENAA_Px_Val_ENABLE << NRF24_REG_EN_AA_ENAA_P0_Pos);
+		/* EN_AA - Specify ACKing for the chosen RX pipe */
+		holder = (uint8_t)(nrf24_config->en_aa << nrf24_config->RX_pipe);
 		nrf24_writeReg(NRF24_REG_EN_AA, &holder, 1);
 
-		// Enable ACKing for the pipe #0
-		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << NRF24_REG_EN_RXADDR_ERX_P0_Pos);
+		/* EN_RXADDR - Enable the pipe specified in the config */
+		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << nrf24_config->RX_pipe);
 		nrf24_writeReg(NRF24_REG_EN_RXADDR, &holder, 1);
 	}
 
 	/* TX specific (only when the mode is TX) */
 	else {
+		/* EN_AA - Specify ACKing for the pipe#0, PTX requirement */
+		holder = (uint8_t)(nrf24_config->en_aa ? 0b1 : 0b0);
+		nrf24_writeReg(NRF24_REG_EN_AA, &holder, 1);
+
 		/* TX Re-transmission */
 		holder = 0b0;
 
@@ -228,7 +234,7 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 		/* TX address */
 		nrf24_writeReg(NRF24_REG_TX_ADDR, nrf24_config->tx_addr, 5);
 
-		/* RX pipe 0 address */
+		/* RX pipe 0 address for ACKing */
 		nrf24_writeReg(NRF24_REG_RX_ADDR_P0, nrf24_config->tx_addr, 5 );
 	}
 
@@ -256,7 +262,8 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	// Final write to the CONFIG register
 	nrf24_writeReg(NRF24_REG_CONFIG, &holder, 1);
 
-	/* Enable the NRF24 module */ 
+	/* Enable the NRF24 module */
+	HAL_Delay(2);
 	CE_Enable();
 }
 
@@ -269,6 +276,7 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
  * @return uint8_t: TX FIFO buffer is empty; 1 = true, 0 = false
  */
 uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
+	/* Transmit data */
 	// Select the NRF24 module
 	NSS_Select();
 
@@ -282,22 +290,17 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 	// Deselect the NRF24 module
 	NSS_Deselect();
 
-	// Ensure the transmission operation is settled
+	// Give the SPI transmission idle time to separate commands for the NRF24 module
 	HAL_Delay(1);
 
+	/* Check on the result */
 	// Get the value of the FIFO STATUS register
-	uint8_t tx_empty_flag = 0b0;
+ 	uint8_t tx_empty_flag = 0b0;
 	nrf24_readReg(NRF24_REG_FIFO_STATUS, &tx_empty_flag, 1);
 
 	// Get the TX FIFO empty flag
 	// ((mask) & FIFO_STATUS) >> TX_EMPTY bit position
 	tx_empty_flag = ((0b1 << NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos) & tx_empty_flag) >> NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos;
-	
-	// if TX FIFO empty flag is empty, flush the TX FIFO buffer
-	if( tx_empty_flag == NRF24_REG_FIFO_STATUS_TX_EMPTY_Val_EMPTY ){
-		cmd = FLUSH_TX; 
-		nrf24_sendStandaloneCmd( cmd );
-	}
 
 	return tx_empty_flag;
 }
