@@ -1,108 +1,79 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "../../Drivers/NRF24L01p/Inc/nrf24l01p.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
-/* USER CODE BEGIN PFP */
 
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_SPI1_Init();
-  /* USER CODE BEGIN 2 */
 
-  /* USER CODE END 2 */
+
+
+  nrf24_config_t nrf24_config = {
+		  .rx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
+		  .tx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
+		  .max_rt_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
+		  .en_crc = NRF24_REG_CONFIG_EN_CRC_Val_ENABLE,
+		  .mode = NRF24_REG_CONFIG_PRIM_RX_Val_PTX,
+
+		  .address_width = NRF24_REG_SETUP_AW_Val_5BYTES,
+		  .data_width = 32,
+		  .en_aa = NRF24_REG_EN_AA_ENAA_Px_Val_DISABLE,
+
+		  // RX-specific (if PTX, no effect)
+		  .RX_pipe = NRF24_REG_EN_RXADDR_ERX_P1_Pos,
+
+		  // TX-specific (if PRX, no effect)
+		  .ard = NRF24_REG_SETUP_RETR_ARD_Val_500microS, // 500 micro sec delay between retransmissions
+		  .arc = 3, // 3 retransmissions
+		  .tx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA},
+
+		  .rf_chl = 10,
+
+		  .rf_pwr = NRF24_REG_RF_SETUP_RF_PWR_Val_0dBm,
+		  .dr_high = NRF24_REG_RF_SETUP_RF_DR_HIGH_Val_2MBPS,
+		  .pll_lock = NRF24_REG_RF_SETUP_PLL_LOCK_Val_RESET,
+		  .dr_low = NRF24_REG_RF_SETUP_RF_DR_LOW_Val_RESET,
+		  .count_wave = NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE,
+  };
+
+  uint8_t TX_data[] = "Hello world! By Ruslan Abdulin\n";
+
+  nrf24_Init( &nrf24_config );
+
+  // Toggle orange LED a few times to signify the initialization completion
+  for(uint8_t i = 0; i < 4; i++){
+	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
+	  HAL_Delay(500);
+  }
+
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
+	  // Toggle a green LED when a TX FIFO buffer is empty
+	  if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
+		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
+	  }
+	  HAL_Delay(1000);
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -333,6 +304,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
   }
   /* USER CODE END Error_Handler_Debug */
 }
