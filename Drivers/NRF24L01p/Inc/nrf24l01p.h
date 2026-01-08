@@ -19,16 +19,18 @@ typedef struct {
   uint8_t mode;           // @NRF24_REG_CONFIG_PRIM_RX_Val
 
   uint8_t address_width;  // @NRF24_REG_SETUP_AW_Val
+  uint8_t data_width;     // Number of data bytes expected on both RX and TX sides (max=255)
 
   uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() [TX-specific]
   uint8_t arc;            // Value between 0 and 15                                 [TX-specific]
+  uint8_t tx_addr[5];     // TX address                                             [TX-specific]
 
-  uint8_t rf_chl;         // 6 bits(0-63) frequency channel
+  uint8_t rf_chl;         // 7 bits(0-127) frequency channel
 
   /* RF_SETUP is suggested to have default for everything
   beside rf_pwr and dr_high which can be set to maximum */
   uint8_t rf_pwr;         // @NRF24_REG_RF_SETUP_RF_PWR_Val
-  uint8_t dr_high;     // @NRF24_REG_RF_SETUP_RF_DR_HIGH_Val
+  uint8_t dr_high;        // @NRF24_REG_RF_SETUP_RF_DR_HIGH_Val
   uint8_t pll_lock;       // @NRF24_REG_RF_SETUP_PLL_LOCK_Val                       [FOR TESTING-ONLY]
   uint8_t dr_low;         // @NRF24_REG_RF_SETUP_RF_DR_LOW_Val
   uint8_t count_wave;     // @NRF24_REG_RF_SETUP_CONT_WAVE_Val
@@ -50,6 +52,7 @@ void nrf24_Init( nrf24_config_t* nrf24_config );
 /* ----------------------------------------------------------- */
 /* ------------------------ General -------------------------- */
 /* ----------------------------------------------------------- */
+// If defined => asserts will be utilized:
 #define NRF24_USE_ASSERTS
 
 // Redundant copy of HAL macros
@@ -308,6 +311,10 @@ e.g., 3 = 3 re-transmits on fail. */
 #define NRF24_REG_FIFO_STATUS_TX_FULL_Pos  5
 #define NRF24_REG_FIFO_STATUS_TX_REUSE_Pos 6
 /* bit7 reserved */
+
+// Values
+#define NRF24_REG_FIFO_STATUS_TX_EMPTY_Val_EMPTY      0b1u
+#define NRF24_REG_FIFO_STATUS_TX_EMPTY_Val_NOT_EMPTY  0b0u
 
 
 /* ---------------- DYNPD (0x1C) ---------------- */

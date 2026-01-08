@@ -28,4 +28,6 @@ Configurable driver with Interrupt handling, error handling, optional asserts fo
 - Pipe #0
 - Receiver Auto-Acknowledgement is enabled
 ### TX
-- Transmitter Auto-Retransmission is enabled
+- Transmitter Auto
+-
+Retransmission is enabled

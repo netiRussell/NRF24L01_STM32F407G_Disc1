@@ -147,9 +147,11 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
 
 
 /* --- Init APIs --- */
-// TODO: implement asserts
 // TODO: apply asserts in init
 // TODO: ensure that the SPI CPOL, CPHA match NRF24l01+'s configs 
+// TODO: esnure that all LSBfirst and MSB first registers are accessed correctly
+// TODO: when implementing interrupts, handle the HAL_BUSY return caused by multiple SPI transmissions at the same time
+// TODO: if smth doesn't work, go over the comments to see mentioned bugs
 /*
  * nrf24_Init - Initializes the NRF24l01+ module in the polling SPI manner
  *
@@ -159,62 +161,13 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
  */
 void nrf24_Init( nrf24_config_t* nrf24_config ){
 	/* Initialize the variable that will hold the values to be written to the registers */
-	uint8_t holder;
-
-	/* Assert if NSS is disabled(high) */
-	custom_assert( HAL_GPIO_ReadPin(NRF24_NSS_PORT, NRF24_NSS_PIN) == GPIO_PIN_SET );
+	uint8_t holder = 0b0;
 
 	/* Disable NRF24 before modifying its registers */
 	CE_Disable();
 
-	/* Config register */
-	holder = 0b0;
-	
-	// Power up
-	holder |= NRF24_REG_CONFIG_PWR_UP_Val_UP << NRF24_REG_CONFIG_PWR_UP_Pos;
-
-	// Mode
-	holder |= nrf24_config->mode << NRF24_REG_CONFIG_PRIM_RX_Pos;
-
-	// Enable CRC
-	holder |= nrf24_config->en_crc << NRF24_REG_CONFIG_EN_CRC_Pos;
-
-	// Mask MAX_RT
-	holder |= nrf24_config->max_rt_iqr << NRF24_REG_CONFIG_MASK_MAX_RT_Pos;
-
-	// Mask TX_DS
-	holder |= nrf24_config->tx_iqr << NRF24_REG_CONFIG_MASK_TX_DS_Pos;
-	
-	// Mask RX_DR
-	holder |= nrf24_config->rx_iqr << NRF24_REG_CONFIG_MASK_RX_DR_Pos;	
-	
-	// Final write to the config register
-	nrf24_writeReg(NRF24_REG_CONFIG, &holder, 1);
-
-	/* RX pipes (only when the mode is RX) */
-	if( nrf24_config->mode ) {
-		// Enable the pipe #0
-		holder = (uint8_t)(NRF24_REG_EN_AA_ENAA_Px_Val_ENABLE << NRF24_REG_EN_AA_ENAA_P0_Pos);
-		nrf24_writeReg(NRF24_REG_EN_AA, &holder, 1);
-
-		// Enable ACKing for the pipe #0
-		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << NRF24_REG_EN_RXADDR_ERX_P0_Pos);
-		nrf24_writeReg(NRF24_REG_EN_RXADDR, &holder, 1);
-	}
-
-	/* TX Re-transmission (only when the mode is TX) */
-	else {
-		holder = 0b0;
-
-		// ARC
-		holder |= nrf24_config->arc << NRF24_REG_SETUP_RETR_ARC_Pos;
-
-		// ARD
-		holder |= nrf24_config->ard << NRF24_REG_SETUP_RETR_ARD_Pos;
-		
-		// Final write to the SETUP_RETR register
-		nrf24_writeReg(NRF24_REG_SETUP_RETR, &holder, 1);
-	}
+	/* Assert if NSS is disabled(high) */
+	custom_assert( HAL_GPIO_ReadPin(NRF24_NSS_PORT, NRF24_NSS_PIN) == GPIO_PIN_SET );
 
 	/* Address Width */
 	holder = (uint8_t)(nrf24_config->address_width << NRF24_REG_SETUP_AW_Pos);
@@ -242,9 +195,109 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	// Count Wave
 	holder |= nrf24_config->count_wave << NRF24_REG_RF_SETUP_CONT_WAVE_Pos;
 
-	// Final write to the RF_SETUP function
+	// Final write to the RF_SETUP register
 	nrf24_writeReg(NRF24_REG_RF_SETUP, &holder, 1);
 
-	/* Enable the NRF24 */ 
+	/* RX specific (only when the mode is RX) */
+	if( nrf24_config->mode ) {
+		/* RX pipes (only when the mode is RX) */
+
+		// Enable the pipe #0
+		holder = (uint8_t)(NRF24_REG_EN_AA_ENAA_Px_Val_ENABLE << NRF24_REG_EN_AA_ENAA_P0_Pos);
+		nrf24_writeReg(NRF24_REG_EN_AA, &holder, 1);
+
+		// Enable ACKing for the pipe #0
+		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << NRF24_REG_EN_RXADDR_ERX_P0_Pos);
+		nrf24_writeReg(NRF24_REG_EN_RXADDR, &holder, 1);
+	}
+
+	/* TX specific (only when the mode is TX) */
+	else {
+		/* TX Re-transmission */
+		holder = 0b0;
+
+		// ARC
+		holder |= nrf24_config->arc << NRF24_REG_SETUP_RETR_ARC_Pos;
+
+		// ARD
+		holder |= nrf24_config->ard << NRF24_REG_SETUP_RETR_ARD_Pos;
+		
+		// Final write to the SETUP_RETR register
+		nrf24_writeReg(NRF24_REG_SETUP_RETR, &holder, 1);
+
+		/* TX address */
+		nrf24_writeReg(NRF24_REG_TX_ADDR, nrf24_config->tx_addr, 5);
+
+		/* RX pipe 0 address */
+		nrf24_writeReg(NRF24_REG_RX_ADDR_P0, nrf24_config->tx_addr, 5 );
+	}
+
+	/* Config register */
+	holder = 0b0;
+
+	// Mode
+	holder |= nrf24_config->mode << NRF24_REG_CONFIG_PRIM_RX_Pos;
+
+	// Power up
+	holder |= NRF24_REG_CONFIG_PWR_UP_Val_UP << NRF24_REG_CONFIG_PWR_UP_Pos;
+
+	// Enable CRC
+	holder |= nrf24_config->en_crc << NRF24_REG_CONFIG_EN_CRC_Pos;
+
+	// Mask MAX_RT
+	holder |= nrf24_config->max_rt_iqr << NRF24_REG_CONFIG_MASK_MAX_RT_Pos;
+
+	// Mask TX_DS
+	holder |= nrf24_config->tx_iqr << NRF24_REG_CONFIG_MASK_TX_DS_Pos;
+	
+	// Mask RX_DR
+	holder |= nrf24_config->rx_iqr << NRF24_REG_CONFIG_MASK_RX_DR_Pos;		
+
+	// Final write to the CONFIG register
+	nrf24_writeReg(NRF24_REG_CONFIG, &holder, 1);
+
+	/* Enable the NRF24 module */ 
 	CE_Enable();
+}
+
+/*
+ * nrf24_Transmit - Transmits data over the NRF24l01+ module in the polling SPI manner
+ *
+ * nrf24_config_t @nrf24_config: structure with the NRF24 configurations 
+ * uint8_t @data: payload of size == nrf24_config->data_width
+ *
+ * @return uint8_t: TX FIFO buffer is empty; 1 = true, 0 = false
+ */
+uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
+	// Select the NRF24 module
+	NSS_Select();
+
+	// Send the "write tx payload" command
+	uint8_t cmd = W_TX_PAYLOAD;
+	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ); 
+
+	// Send the data
+	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, nrf24_config->data_width, 1000 );
+
+	// Deselect the NRF24 module
+	NSS_Deselect();
+
+	// Ensure the transmission operation is settled
+	HAL_Delay(1);
+
+	// Get the value of the FIFO STATUS register
+	uint8_t tx_empty_flag = 0b0;
+	nrf24_readReg(NRF24_REG_FIFO_STATUS, &tx_empty_flag, 1);
+
+	// Get the TX FIFO empty flag
+	// ((mask) & FIFO_STATUS) >> TX_EMPTY bit position
+	tx_empty_flag = ((0b1 << NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos) & tx_empty_flag) >> NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos;
+	
+	// if TX FIFO empty flag is empty, flush the TX FIFO buffer
+	if( tx_empty_flag == NRF24_REG_FIFO_STATUS_TX_EMPTY_Val_EMPTY ){
+		cmd = FLUSH_TX; 
+		nrf24_sendStandaloneCmd( cmd );
+	}
+
+	return tx_empty_flag;
 }
