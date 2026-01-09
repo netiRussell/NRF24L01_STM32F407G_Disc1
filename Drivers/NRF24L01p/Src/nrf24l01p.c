@@ -42,8 +42,20 @@ static void custom_assert( int result ){
 *  
 * @return: void 
 */
-static void centralized_errorHandler(){
+/*
+static void centralized_errorHandler(UART_HandleTypeDef huart, uint8_t *error_msg, uint8_t msg_size) {
 	// TODO: to be implemented
+	if( HAL_UART_Transmit(&huart, error_msg, msg_size, HAL_MAX_DELAY) != HAL_OK){
+		Error_Handler();
+	}
+} */
+
+// TODO: Dummy handler, to be substituted with the one that takes in function to be invoked with the corresponding error code pass to it
+static void centralized_errorHandler() {
+	uint8_t dummy = 0;
+	for(uint8_t i = 0; i < 3; i++){
+		dummy++;
+	}	
 }
 
 
@@ -95,10 +107,14 @@ void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size ){
 	NSS_Select();
 
 	// Transmit register address over the SPI
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 );
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Transmit data over the SPI
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, size, 1000 );
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, size, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 	
 	// Release NRF24
 	NSS_Deselect();
@@ -118,10 +134,14 @@ void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size ){
 	NSS_Select();
 
 	// Request data from the register
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 );
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Store the received data in the buffer
-	HAL_SPI_Receive( &NRF24_SPI_HANDLER, buffer, size, 1000);
+	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, buffer, size, 1000) != HAL_OK ){
+		centralized_errorHandler();
+	}
 	
 	// Release NRF24
 	NSS_Deselect();
@@ -139,7 +159,9 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
 	NSS_Select();
 
 	// Request data from the register
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 );
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Release NRF24
 	NSS_Deselect();
@@ -158,7 +180,9 @@ uint8_t nrf24_get_status_with_nop(){
 	NSS_Select();
 
 	// Send a NOP and save the data
-	HAL_SPI_TransmitReceive( &NRF24_SPI_HANDLER, &cmd, &status_buffer, 1, 1000 );
+	if( HAL_SPI_TransmitReceive( &NRF24_SPI_HANDLER, &cmd, &status_buffer, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Release NRF24
 	NSS_Deselect();
@@ -197,13 +221,10 @@ uint8_t nrf24_is_rx_data_available(nrf24_config_t *nrf24_config){
 
 /* --- Init APIs --- */
 // TODO: apply asserts in init
+// TODO: finish the centralized error handler
 // TODO: ensure that the SPI CPOL, CPHA match NRF24l01+'s configs 
 // TODO: esnure that all LSBfirst and MSB first registers are accessed correctly
 // TODO: when implementing interrupts, handle the HAL_BUSY return caused by multiple SPI transmissions at the same time
-
-// TODO: Substitute the HAL_Delay() approach with the STATUS register check
-// TODO: ensure that every HAL_SPI is asserted
-
 /*
  * nrf24_Init - Initializes the NRF24l01+ module in the polling SPI manner
  *
@@ -353,7 +374,7 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
  * nrf24_config_t @nrf24_config: structure with the NRF24 configurations 
  * uint8_t @data: payload of size == nrf24_config->data_width
  *
- * @return uint8_t: TX FIFO buffer is empty; 1 = true, 0 = false
+ * @return uint8_t: Whether maximum # of retransmissions was reached or the data was successfully sent with ACKing(if it was enabled), 1=true, 0=false
  */
 uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 	/* Transmit data */
@@ -362,27 +383,61 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 
 	// Send the "write tx payload" command
 	uint8_t cmd = W_TX_PAYLOAD;
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ); 
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Send the data
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, nrf24_config->data_width, 1000 );
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, nrf24_config->data_width, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Deselect the NRF24 module
 	NSS_Deselect();
 
-	// Give the SPI transmission idle time to separate commands for the NRF24 module by keeping the NSS pin HIGH for 1micro sec
+	// Give the SPI transmission idle time to separate commands for the NRF24 module by keeping the NSS pin HIGH for 1ms
 	HAL_Delay(1);
 
-	/* Check if all the values have been shifted from the NRF24 TX buffer */
-	// Get the value of the FIFO STATUS register
- 	uint8_t tx_empty_flag = 0b0;
-	nrf24_readReg(NRF24_REG_FIFO_STATUS, &tx_empty_flag, 1);
+	/* Esnure the data was succesfully sent and ACK took place (if it is enabled) */
+	uint8_t status_buffer = 0;
+	uint8_t tx_ds = 0;
+	uint8_t max_rt = 0;
 
-	// Get the TX FIFO empty flag
-	// ((mask) & FIFO_STATUS) >> TX_EMPTY bit position
-	tx_empty_flag = ((0b1 << NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos) & tx_empty_flag) >> NRF24_REG_FIFO_STATUS_TX_EMPTY_Pos;
+	uint32_t start = HAL_GetTick();
+	while(HAL_GetTick() - start <= 20){
 
-	return tx_empty_flag;
+		// Get the value of the STATUS register
+		status_buffer = nrf24_get_status_with_nop();
+		tx_ds = (status_buffer >> NRF24_REG_STATUS_TX_DS_Pos) & 0b1;
+		max_rt = (status_buffer >> NRF24_REG_STATUS_MAX_RT_Pos) & 0b1;
+
+		/* Transmission was successful */ 
+		if( tx_ds == TRUE ){
+			// Clear the flag and return success
+			// No need to flush, the NRF24 module automatically takes care of that
+			uint8_t holder = 0b1 << NRF24_REG_STATUS_TX_DS_Pos;
+			nrf24_writeReg(NRF24_REG_STATUS, &holder, 1);
+
+			return 1;
+		/* Not successful, e.g., no ACK received */
+		} else if(max_rt == TRUE){
+				/* Maximum number of retransmissions has been reached */
+
+				// Clear the flag
+				// [WARNING] technically, it is not a success because ACK was never provided by any RX device
+				uint8_t holder = 0b1 << NRF24_REG_STATUS_MAX_RT_Pos;
+				nrf24_writeReg(NRF24_REG_STATUS, &holder, 1);
+
+				// Flush TX FIFO
+				cmd = FLUSH_TX;
+				nrf24_sendStandaloneCmd(cmd);
+
+				return 1;
+		}
+	}
+
+	// Transmission wasn't succesful and the maximum # of retransmissions wasn't reached
+ 	return 0;
 }
 
 /*
@@ -405,10 +460,14 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 
 	// Send the "read rx payload" command
 	uint8_t cmd = R_RX_PAYLOAD;
-	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ); 
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	} 
 
 	// Retrieve the data from the buffer
-	HAL_SPI_Receive( &NRF24_SPI_HANDLER, rx_buffer, nrf24_config->data_width, 1000 );
+	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, rx_buffer, nrf24_config->data_width, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
 
 	// Deselect the NRF24 module
 	NSS_Deselect();

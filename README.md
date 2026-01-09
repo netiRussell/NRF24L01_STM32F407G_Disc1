@@ -1,5 +1,5 @@
 # NRF24L01 
-Configurable driver with Interrupt handling, error handling, optional asserts for the STM32F407G-Disc1 board
+Configurable driver with Interrupt handling, error handling, optional asserts for the STM32F407G-Disc1 board. The driver is easy to modify to make it compatible with other STM32 boards. Only one pipe RX is employed.
 
 ## Initial setup
 ### Clock

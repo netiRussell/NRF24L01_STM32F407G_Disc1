@@ -30,7 +30,6 @@ int main(void)
 	MX_USART2_UART_Init();
 
 
-
 	nrf24_config_t nrf24_config = {
 		  .rx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
 		  .tx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
@@ -213,7 +212,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(CS_I2C_SPI_GPIO_Port, CS_I2C_SPI_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(CS_I2C_SPI_GPIO_Port, CS_I2C_SPI_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(OTG_FS_PowerSwitchOn_GPIO_Port, OTG_FS_PowerSwitchOn_Pin, GPIO_PIN_SET);
