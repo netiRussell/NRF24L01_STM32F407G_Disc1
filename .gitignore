@@ -11,3 +11,4 @@ STM32F407VGTX_RAM.ld
 /Drivers/CMSIS/
 /.vscode
 /Debug
+NRF24L01_STM32F407G_Disc1 Debug.launch

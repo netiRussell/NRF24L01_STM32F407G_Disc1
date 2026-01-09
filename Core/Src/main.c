@@ -2,31 +2,36 @@
 #include "main.h"
 #include "../../Drivers/NRF24L01p/Inc/nrf24l01p.h"
 
-
 /* Private variables ---------------------------------------------------------*/
 SPI_HandleTypeDef hspi1;
+UART_HandleTypeDef huart2;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_USART2_UART_Init(void);
 
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
 int main(void)
 {
+	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+	HAL_Init();
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	/* Configure the system clock */
+	SystemClock_Config();
 
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_SPI1_Init();
+	/* Initialize all configured peripherals */
+	MX_GPIO_Init();
+	MX_SPI1_Init();
+	MX_USART2_UART_Init();
 
 
 
-  nrf24_config_t nrf24_config = {
+	nrf24_config_t nrf24_config = {
 		  .rx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
 		  .tx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
 		  .max_rt_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
@@ -38,7 +43,8 @@ int main(void)
 		  .en_aa = NRF24_REG_EN_AA_ENAA_Px_Val_DISABLE,
 
 		  // RX-specific (if PTX, no effect)
-		  .RX_pipe = NRF24_REG_EN_RXADDR_ERX_P1_Pos,
+		  .rx_pipe = NRF24_REG_EN_RXADDR_ERX_P1_Pos,
+		  .rx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA},
 
 		  // TX-specific (if PRX, no effect)
 		  .ard = NRF24_REG_SETUP_RETR_ARD_Val_500microS, // 500 micro sec delay between retransmissions
@@ -52,28 +58,45 @@ int main(void)
 		  .pll_lock = NRF24_REG_RF_SETUP_PLL_LOCK_Val_RESET,
 		  .dr_low = NRF24_REG_RF_SETUP_RF_DR_LOW_Val_RESET,
 		  .count_wave = NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE,
-  };
+	};
 
-  uint8_t TX_data[] = "Hello world! By Ruslan Abdulin\n";
+	uint8_t TX_data[] = "Hello world! By Ruslan Abdulin\n";
+	uint8_t RX_buffer[32];
 
-  nrf24_Init( &nrf24_config );
+	nrf24_Init( &nrf24_config );
 
-  // Toggle orange LED a few times to signify the initialization completion
-  for(uint8_t i = 0; i < 4; i++){
+	// Toggle orange LED a few times to signify the initialization completion
+	for(uint8_t i = 0; i < 4; i++){
 	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
 	  HAL_Delay(500);
-  }
+	}
 
 
-  /* Infinite loop */
-  while (1)
-  {
-	  // Toggle a green LED when a TX FIFO buffer is empty
-	  if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
-		  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_12);
+	/* Infinite loop */
+	while (1)
+	{
+	  /* TX device */
+	  if( nrf24_config.mode == NRF24_REG_CONFIG_PRIM_RX_Val_PTX ){
+		  // Toggle a green LED when a TX FIFO buffer is empty
+		  if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
+			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+			  HAL_Delay(500);
+			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
+		  } else {
+			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+			  HAL_Delay(500);
+			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+		  }
+
+		  HAL_Delay(500);
+
+
+	  /* RX device */
+	  } else {
+
 	  }
-	  HAL_Delay(1000);
-  }
+
+	}
 }
 
 /**
@@ -129,13 +152,6 @@ void SystemClock_Config(void)
 static void MX_SPI1_Init(void)
 {
 
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
   /* SPI1 parameter configuration*/
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
@@ -153,9 +169,29 @@ static void MX_SPI1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN SPI1_Init 2 */
 
-  /* USER CODE END SPI1_Init 2 */
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
 }
 
@@ -167,9 +203,6 @@ static void MX_SPI1_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-
-  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -283,15 +316,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(MEMS_INT2_GPIO_Port, &GPIO_InitStruct);
-
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-
-  /* USER CODE END MX_GPIO_Init_2 */
 }
-
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.

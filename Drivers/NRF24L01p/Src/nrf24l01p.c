@@ -145,13 +145,65 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
 	NSS_Deselect();
 }
 
+/*
+ * nrf24_get_status_with_nop - Reads the status register by sending NOP 
+ * 
+ * @return uint8_t: value of STATUS register 
+*/
+uint8_t nrf24_get_status_with_nop(){
+	uint8_t status_buffer = 0b0;
+	uint8_t cmd = NOP;
+
+	// Enable listening on the NRF24's end by pulling NSS pin low (SPI logic)
+	NSS_Select();
+
+	// Send a NOP and save the data
+	HAL_SPI_TransmitReceive( &NRF24_SPI_HANDLER, &cmd, &status_buffer, 1, 1000 );
+
+	// Release NRF24
+	NSS_Deselect();
+
+	return status_buffer;
+}
+
+/*
+ * nrf24_is_rx_data_available - Checks if RX data is available in the specified pipe 
+ *
+ * nrf24_config_t @nrf24_config_t: structure with the NRF24 configurations 
+ * 
+ * @return uint8_t: RX data availability in the specified pipe status, 1 = some data is inside, 0 = empty  
+*/
+uint8_t nrf24_is_rx_data_available(nrf24_config_t *nrf24_config){
+	/* Get the value of the status register */	
+	uint8_t status_buffer = nrf24_get_status_with_nop();
+
+	/* Check on the RX data ready flag */
+	if( (status_buffer >> NRF24_REG_STATUS_RX_DR_Pos) & 0b1 ){
+		// Clear the RX_DR flag
+		uint8_t holder = 0b1 << NRF24_REG_STATUS_RX_DR_Pos;
+		nrf24_writeReg(NRF24_REG_STATUS, &holder, 1);
+
+		/* Get pipe-specific flag */
+		status_buffer = (status_buffer >> NRF24_REG_STATUS_RX_P_NO_Pos) & 0b111;
+
+		if( status_buffer == nrf24_config->rx_pipe ){
+			return 1;
+		} 
+	}
+
+	return 0;
+} 
+
 
 /* --- Init APIs --- */
 // TODO: apply asserts in init
 // TODO: ensure that the SPI CPOL, CPHA match NRF24l01+'s configs 
 // TODO: esnure that all LSBfirst and MSB first registers are accessed correctly
 // TODO: when implementing interrupts, handle the HAL_BUSY return caused by multiple SPI transmissions at the same time
-// TODO: if smth doesn't work, go over the comments to see mentioned bugs
+
+// TODO: Substitute the HAL_Delay() approach with the STATUS register check
+// TODO: ensure that every HAL_SPI is asserted
+
 /*
  * nrf24_Init - Initializes the NRF24l01+ module in the polling SPI manner
  *
@@ -170,9 +222,10 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	/* Disable NRF24 before modifying its registers */
 	CE_Disable();
 
-	/* Assert if NSS is disabled(high) */
+	/* Asserts */
+	// NSS is disabled(high)
 	custom_assert( HAL_GPIO_ReadPin(NRF24_NSS_PORT, NRF24_NSS_PIN) == GPIO_PIN_SET );
-
+	
 	/* Address Width */
 	holder = (uint8_t)(nrf24_config->address_width << NRF24_REG_SETUP_AW_Pos);
 	nrf24_writeReg(NRF24_REG_SETUP_AW, &holder, 1);
@@ -205,12 +258,39 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	/* RX specific (only when the mode is RX) */
 	if( nrf24_config->mode ) {
 		/* EN_AA - Specify ACKing for the chosen RX pipe */
-		holder = (uint8_t)(nrf24_config->en_aa << nrf24_config->RX_pipe);
+		holder = (uint8_t)(nrf24_config->en_aa << nrf24_config->rx_pipe);
 		nrf24_writeReg(NRF24_REG_EN_AA, &holder, 1);
 
 		/* EN_RXADDR - Enable the pipe specified in the config */
-		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << nrf24_config->RX_pipe);
+		holder = (uint8_t)(NRF24_REG_EN_RXADDR_ERX_Px_Val_ENABLE << nrf24_config->rx_pipe);
 		nrf24_writeReg(NRF24_REG_EN_RXADDR, &holder, 1);
+
+		/* RX_ADDR_Px - RX adress */
+		// Pipe#0 case
+		if(nrf24_config->rx_pipe == NRF24_REG_EN_RXADDR_ERX_P0_Pos) {
+			nrf24_writeReg(NRF24_REG_RX_ADDR_P0, nrf24_config->rx_addr, 5);
+		} else{
+			// Fill-in the pipe#1 since it stores the first 4 address bytes for any other pipe
+			nrf24_writeReg(NRF24_REG_RX_ADDR_P1, nrf24_config->rx_addr, 5);
+
+			// Get register address of the corresponding pipe
+			// Pipe#1 address + (specified pipe - pipe#1); e.g.,pipe#3: 0x0B+(3-1)=0x0D
+			uint8_t pipe_reg_addr = NRF24_REG_RX_ADDR_P1 + nrf24_config->rx_pipe-NRF24_REG_EN_RXADDR_ERX_P1_Pos;
+
+			// Get LSB of the RX address
+			holder = (uint8_t)(nrf24_config->rx_addr[0]);
+
+			// Final write to RX_ADDR_Px. i.e., Copy the LSB to the corresponding pipe
+			nrf24_writeReg(pipe_reg_addr, &holder, 1);			
+		}
+
+		/* RX_PW_Px - size of the data in bytes */
+		// Get register address of the corresponding pipe
+		// Pipe#0 address + (spcified pipe - pipe#0); e.g., pipe#5: 0x11+(5-0) = 0x16
+		holder = NRF24_REG_RX_PW_P0  + nrf24_config->rx_pipe-NRF24_REG_EN_RXADDR_ERX_P0_Pos;
+
+		// Final write to RX_PW_Px
+		nrf24_writeReg(holder, &nrf24_config->data_width, 1);
 	}
 
 	/* TX specific (only when the mode is TX) */
@@ -290,10 +370,10 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 	// Deselect the NRF24 module
 	NSS_Deselect();
 
-	// Give the SPI transmission idle time to separate commands for the NRF24 module
+	// Give the SPI transmission idle time to separate commands for the NRF24 module by keeping the NSS pin HIGH for 1micro sec
 	HAL_Delay(1);
 
-	/* Check on the result */
+	/* Check if all the values have been shifted from the NRF24 TX buffer */
 	// Get the value of the FIFO STATUS register
  	uint8_t tx_empty_flag = 0b0;
 	nrf24_readReg(NRF24_REG_FIFO_STATUS, &tx_empty_flag, 1);
@@ -304,3 +384,37 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 
 	return tx_empty_flag;
 }
+
+/*
+ * nrf24_Receive - Reads data from the NRF24l01+ module in the polling SPI manner
+ *
+ * nrf24_config_t @nrf24_config: structure with the NRF24 configurations 
+ * uint8_t @rx_buffer: RX buffer of size == nrf24_config->data_width
+ *
+ * @return uint8_t: success flag, 1 = success, 0 = failure
+ */
+ uint8_t nrf24_Receive(nrf24_config_t *nrf24_config, uint8_t *rx_buffer){
+	/* Check if data is availabe in the specified pipe */
+	if( nrf24_is_rx_data_available(nrf24_config) == FALSE ){
+		return 0;
+	}
+
+	/* Receive data */
+	// Select the NRF24 module
+	NSS_Select();
+
+	// Send the "read rx payload" command
+	uint8_t cmd = R_RX_PAYLOAD;
+	HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ); 
+
+	// Retrieve the data from the buffer
+	HAL_SPI_Receive( &NRF24_SPI_HANDLER, rx_buffer, nrf24_config->data_width, 1000 );
+
+	// Deselect the NRF24 module
+	NSS_Deselect();
+
+	// Give the SPI transmission idle time to separate commands for the NRF24 module by keeping the NSS pin HIGH for 1micro sec
+	HAL_Delay(1);
+
+	return 1;
+ }

@@ -19,14 +19,15 @@ typedef struct {
   uint8_t mode;           // @NRF24_REG_CONFIG_PRIM_RX_Val
 
   uint8_t address_width;  // @NRF24_REG_SETUP_AW_Val
-  uint8_t data_width;     // Number of data bytes expected on both RX and TX sides (max=255)
+  uint8_t data_width;     // Number of data bytes expected on both RX and TX sides (min=1, max=32)
   uint8_t en_aa;		  // @NRF24_REG_EN_AA_ENAA_Px_Val
 
-  uint8_t RX_pipe;		  // @NRF24_REG_EN_RXADDR_ERX_ [RX-specific]
+  uint8_t rx_pipe;		  // @NRF24_REG_EN_RXADDR_ERX_ [RX-specific]
+  uint8_t rx_addr[5];        // RX address, 5 bytes                                      						[RX-specific]
 
   uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() 										[TX-specific]
   uint8_t arc;            // Values between 0 and 15, where 0 = no retransmission, 1 = 1 retr, 2 = 2 rets, ... 15 = 15 retr	[TX-specific]
-  uint8_t tx_addr[5];     // TX address                                             										[TX-specific]
+  uint8_t tx_addr[5];     // TX address, 5 bytes                                             						[TX-specific]
 
   uint8_t rf_chl;         // 7 bits(0-127) frequency channel
 
@@ -50,6 +51,9 @@ void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size );
 void nrf24_sendStandaloneCmd( uint8_t cmd );
 void nrf24_Init( nrf24_config_t* nrf24_config );
 uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data);
+uint8_t nrf24_get_status_with_nop();
+uint8_t nrf24_is_rx_data_available(nrf24_config_t *nrf24_config);
+uint8_t nrf24_Receive(nrf24_config_t *nrf24_config, uint8_t *rx_buffer);
 
 
 
