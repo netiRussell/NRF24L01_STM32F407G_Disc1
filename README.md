@@ -28,6 +28,8 @@ Configurable driver with Interrupt handling, error handling, optional asserts fo
 - Auto-Acknowledgement can be enabled/disabled in the config struct
 ### RX
 - Pipe can be specified in the config struct
+- rx_addr and rf_chl must have the same value as the device that will transmit data to the NRF24 module
 ### TX
 - ACKing address for the pipe#0 is provided
 - Retransmission count and delay when no ACK received can be specified in the config struct
+- tx_addr and rf_chl must have the same value as the device that will receive data from the NRF24 module

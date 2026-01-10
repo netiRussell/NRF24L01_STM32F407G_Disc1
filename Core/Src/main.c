@@ -35,7 +35,7 @@ int main(void)
 		  .tx_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
 		  .max_rt_iqr = NRF24_REG_CONFIG_MASK_xx_Val_IQR_DISABLE,
 		  .en_crc = NRF24_REG_CONFIG_EN_CRC_Val_ENABLE,
-		  .mode = NRF24_REG_CONFIG_PRIM_RX_Val_PTX,
+		  .mode = NRF24_REG_CONFIG_PRIM_RX_Val_PRX,
 
 		  .address_width = NRF24_REG_SETUP_AW_Val_5BYTES,
 		  .data_width = 32,
@@ -43,12 +43,12 @@ int main(void)
 
 		  // RX-specific (if PTX, no effect)
 		  .rx_pipe = NRF24_REG_EN_RXADDR_ERX_P1_Pos,
-		  .rx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA},
+		  .rx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA}, // Must be the same as tx_addr
 
 		  // TX-specific (if PRX, no effect)
 		  .ard = NRF24_REG_SETUP_RETR_ARD_Val_500microS, // 500 micro sec delay between retransmissions
 		  .arc = 3, // 3 retransmissions
-		  .tx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA},
+		  .tx_addr = {0xEE, 0xDD, 0xCC, 0xBB, 0xAA}, // Must be the same as rx_addr
 
 		  .rf_chl = 10,
 
@@ -59,7 +59,7 @@ int main(void)
 		  .count_wave = NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE,
 	};
 
-	uint8_t TX_data[] = "Hello world! By Ruslan Abdulin\n";
+	uint8_t TX_data[] = "Hello world2! By Ruslan Abdulin\n";
 	uint8_t RX_buffer[32];
 
 	nrf24_Init( &nrf24_config );
@@ -72,30 +72,41 @@ int main(void)
 
 
 	/* Infinite loop */
-	while (1)
-	{
-	  /* TX device */
-	  if( nrf24_config.mode == NRF24_REG_CONFIG_PRIM_RX_Val_PTX ){
-		  // Toggle a green LED when a TX FIFO buffer is empty
-		  if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
-			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
-			  HAL_Delay(500);
-			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
-		  } else {
-			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-			  HAL_Delay(500);
-			  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
-		  }
+  /* TX device */
+  if( nrf24_config.mode == NRF24_REG_CONFIG_PRIM_RX_Val_PTX ){
+    while (1) {
+      // Toggle a green LED when a TX FIFO buffer is empty
+      if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
+      } else {
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+      }
 
-		  HAL_Delay(500);
+      HAL_Delay(500);
+    }
 
+  /* RX device */
+  } else {
+    while(1){
+      // Toggle a green LED when a TX FIFO buffer is empty
+      if( nrf24_Receive(&nrf24_config, RX_buffer) == TRUE ){
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+        HAL_UART_Transmit(&huart2, RX_buffer, 32, 1000);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
+      } else {
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
+      }
 
-	  /* RX device */
-	  } else {
-
-	  }
-
-	}
+      HAL_Delay(500);
+    }
+  }
 }
 
 /**
