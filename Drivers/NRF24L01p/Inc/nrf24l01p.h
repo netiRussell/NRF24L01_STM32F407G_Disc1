@@ -20,10 +20,10 @@ typedef struct {
 
   uint8_t address_width;  // @NRF24_REG_SETUP_AW_Val
   uint8_t data_width;     // Number of data bytes expected on both RX and TX sides (min=1, max=32)
-  uint8_t en_aa;		  // @NRF24_REG_EN_AA_ENAA_Px_Val
+  uint8_t en_aa;		      // @NRF24_REG_EN_AA_ENAA_Px_Val
 
-  uint8_t rx_pipe;		  // @NRF24_REG_EN_RXADDR_ERX_ [RX-specific]
-  uint8_t rx_addr[5];        // RX address, 5 bytes                                      						[RX-specific]
+  uint8_t rx_pipe;		    // @NRF24_REG_EN_RXADDR_ERX_ [RX-specific]
+  uint8_t rx_addr[5];     // RX address, 5 bytes                                      						[RX-specific]
 
   uint8_t ard;            // @NRF24_REG_SETUP_RETR_ARD_Func_Val_step250_max4000us() 										[TX-specific]
   uint8_t arc;            // Values between 0 and 15, where 0 = no retransmission, 1 = 1 retr, 2 = 2 rets, ... 15 = 15 retr	[TX-specific]
@@ -49,11 +49,12 @@ typedef struct {
 void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size );
 void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size );
 void nrf24_sendStandaloneCmd( uint8_t cmd );
+void nrf24_sendCmd_Receive( uint8_t cmd, uint8_t *response_buffer, uint8_t response_size );
 void nrf24_Init( nrf24_config_t* nrf24_config );
-uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data);
+uint8_t nrf24_is_rx_data_available( nrf24_config_t *nrf24_config );
 uint8_t nrf24_get_status_with_nop();
-uint8_t nrf24_is_rx_data_available(nrf24_config_t *nrf24_config);
-uint8_t nrf24_Receive(nrf24_config_t *nrf24_config, uint8_t *rx_buffer);
+uint8_t nrf24_Transmit( nrf24_config_t* nrf24_config, uint8_t *tx_buffer, uint8_t data_size );
+uint8_t nrf24_Receive( nrf24_config_t *nrf24_config, uint8_t *rx_buffer );
 
 
 
@@ -67,8 +68,9 @@ uint8_t nrf24_Receive(nrf24_config_t *nrf24_config, uint8_t *rx_buffer);
 #define GPIO_PIN_RESET  0b0u
 #define GPIO_PIN_SET    0b1u
 
-#define FALSE           0b0u
-#define TRUE            0b1u
+#define FALSE           0b00u
+#define TRUE            0b01u
+#define PARTIAL_TRUE    0b10u
 
 
 /* ----------------------------------------------------------- */

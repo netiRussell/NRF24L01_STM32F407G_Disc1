@@ -39,7 +39,7 @@ int main(void)
 
 		  .address_width = NRF24_REG_SETUP_AW_Val_5BYTES,
 		  .data_width = 32,
-		  .en_aa = NRF24_REG_EN_AA_ENAA_Px_Val_DISABLE,
+		  .en_aa = NRF24_REG_EN_AA_ENAA_Px_Val_ENABLE,
 
 		  // RX-specific (if PTX, no effect)
 		  .rx_pipe = NRF24_REG_EN_RXADDR_ERX_P1_Pos,
@@ -59,28 +59,28 @@ int main(void)
 		  .count_wave = NRF24_REG_RF_SETUP_CONT_WAVE_Val_DISABLE,
 	};
 
-	uint8_t TX_data[] = "Hello world2! By Ruslan Abdulin\n";
+	uint8_t TX_data[] = "NRF24 Driver By Ruslan A.";
 	uint8_t RX_buffer[32];
 
 	nrf24_Init( &nrf24_config );
 
-	// Toggle orange LED a few times to signify the initialization completion
-	for(uint8_t i = 0; i < 4; i++){
-	  HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
-	  HAL_Delay(500);
-	}
-
-
-	/* Infinite loop */
+  /* Infinite loop */
   /* TX device */
   if( nrf24_config.mode == NRF24_REG_CONFIG_PRIM_RX_Val_PTX ){
     while (1) {
-      // Toggle a green LED when a TX FIFO buffer is empty
-      if( nrf24_Transmit(&nrf24_config, TX_data) == TRUE ){
+      uint8_t transmit_status = nrf24_Transmit(&nrf24_config, TX_data, sizeof(TX_data)/sizeof(TX_data[0]));
+      if( transmit_status == TRUE ){
+        // Toggle a green LED if msg is sent and ACK received(if enabled)
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
         HAL_Delay(500);
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
+      } else if( transmit_status == PARTIAL_TRUE ){
+        // Toggle Orange LED to signify that a message was transmitted but not ACK was returned
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_SET);
+        HAL_Delay(500);
+        HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
       } else {
+        // Toggle Red LED if TX transmission wasn't successful
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
         HAL_Delay(500);
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);
@@ -92,13 +92,18 @@ int main(void)
   /* RX device */
   } else {
     while(1){
-      // Toggle a green LED when a TX FIFO buffer is empty
-      if( nrf24_Receive(&nrf24_config, RX_buffer) == TRUE ){
+      uint8_t rx_payload_size = nrf24_Receive(&nrf24_config, RX_buffer);
+      if( rx_payload_size > 0 ){
+        // Toggle a green LED if msg is received successfully
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
-        HAL_UART_Transmit(&huart2, RX_buffer, 32, 1000);
+
+        // [WARNING] STM32F407G-Disc1 doesn't natively support VCP and will not transmit any data over the USB connected to the ST-Link. If you use a different board, this is the command you can use to print a msg into a terminal. Ensure that your UART peripheral is connected to VCP.
+        HAL_UART_Transmit(&huart2, RX_buffer, rx_payload_size, 1000);
+
         HAL_Delay(500);
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET);
       } else {
+        // Toggle Red LED if RX transmission wasn't successful
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
         HAL_Delay(500);
         HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_RESET);

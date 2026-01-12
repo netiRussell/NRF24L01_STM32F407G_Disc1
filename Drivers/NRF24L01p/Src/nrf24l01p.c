@@ -168,6 +168,33 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
 }
 
 /*
+ * nrf24_sendCmd_Receive - Sends the @cmd command to the NRF24 module and saves the response
+ *
+ * uint8_t @cmd: The command to be sent that triggers a response from the NRF24 module
+ * uint8_t @response_buffer: The buffer where the response will be saved 
+ * uint8_t @response_size: Size of the response data 
+ * 
+ * @return: void
+ */
+void nrf24_sendCmd_Receive( uint8_t cmd, uint8_t *response_buffer, uint8_t response_size ){
+	// Select the NRF24 module
+	NSS_Select();
+
+	// Send the command
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	} 
+
+	// Send dummy TX to provide the CLK for the NRF24's response
+	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, response_buffer, response_size, 1000 ) != HAL_OK ){
+		centralized_errorHandler();
+	}
+
+	// Deselect the NRF24 module
+	NSS_Deselect();
+}
+
+/*
  * nrf24_get_status_with_nop - Reads the status register by sending NOP 
  * 
  * @return uint8_t: value of STATUS register 
@@ -276,6 +303,15 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 	// Final write to the RF_SETUP register
 	nrf24_writeReg(NRF24_REG_RF_SETUP, &holder, 1);
 
+	/* FEATURE Setup */
+	holder = 0b1 << NRF24_REG_FEATURE_EN_DPL_Pos;
+
+	// Enable Dynamic Payload Size (DPL) if ShockBurst is enabled
+	if( nrf24_config->en_aa != NRF24_REG_EN_AA_ENAA_Px_Val_DISABLE &&
+		  nrf24_config->arc != NRF24_REG_SETUP_RETR_ARC_Val_DISABLE  ){
+		nrf24_writeReg(NRF24_REG_FEATURE, &holder, 1);
+	}
+
 	/* RX specific (only when the mode is RX) */
 	if( nrf24_config->mode ) {
 		/* EN_AA - Specify ACKing for the chosen RX pipe */
@@ -309,9 +345,11 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 		// Get register address of the corresponding pipe
 		// Pipe#0 address + (spcified pipe - pipe#0); e.g., pipe#5: 0x11+(5-0) = 0x16
 		holder = NRF24_REG_RX_PW_P0  + nrf24_config->rx_pipe-NRF24_REG_EN_RXADDR_ERX_P0_Pos;
-
-		// Final write to RX_PW_Px
 		nrf24_writeReg(holder, &nrf24_config->data_width, 1);
+
+		/* DYNPD - Enable DPL for the specified pipe */
+		holder = 0b1 << nrf24_config->rx_pipe;
+		nrf24_writeReg(NRF24_REG_DYNPD, &holder, 1);
 	}
 
 	/* TX specific (only when the mode is TX) */
@@ -337,6 +375,10 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
 
 		/* RX pipe 0 address for ACKing */
 		nrf24_writeReg(NRF24_REG_RX_ADDR_P0, nrf24_config->tx_addr, 5 );
+
+		/* DYNPD - Enable DPL for pipe#0 */
+		holder = 0b1;
+		nrf24_writeReg(NRF24_REG_DYNPD, &holder, 1);
 	}
 
 	/* Config register */
@@ -372,11 +414,12 @@ void nrf24_Init( nrf24_config_t* nrf24_config ){
  * nrf24_Transmit - Transmits data over the NRF24l01+ module in the polling SPI manner
  *
  * nrf24_config_t @nrf24_config: structure with the NRF24 configurations 
- * uint8_t @data: payload of size == nrf24_config->data_width
+ * uint8_t @tx_buffer: payload
+ * uint8_t @data_size: size of the payload. if static, must be nrf24_config->data_width; if DPL, compute using sizeof()
  *
- * @return uint8_t: Whether maximum # of retransmissions was reached or the data was successfully sent with ACKing(if it was enabled), 1=true, 0=false
+ * @return uint8_t: Whether maximum # of retransmissions was reached or the data was successfully sent with ACKing(if it was enabled), 2=TX sent info but no ACK in return, 1=true, 0=false
  */
-uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
+uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *tx_buffer, uint8_t data_size){
 	/* Transmit data */
 	// Select the NRF24 module
 	NSS_Select();
@@ -388,7 +431,7 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 	}
 
 	// Send the data
-	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, nrf24_config->data_width, 1000 ) != HAL_OK ){
+	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, tx_buffer, data_size, 1000 ) != HAL_OK ){
 		centralized_errorHandler();
 	}
 
@@ -403,6 +446,7 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 	uint8_t tx_ds = 0;
 	uint8_t max_rt = 0;
 
+	// 20ms timeout for successful transmission
 	uint32_t start = HAL_GetTick();
 	while(HAL_GetTick() - start <= 20){
 
@@ -419,10 +463,9 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 			nrf24_writeReg(NRF24_REG_STATUS, &holder, 1);
 
 			return 1;
-		/* Not successful, e.g., no ACK received */
+		
+		/* Maximum number of retransmissions has been reached */
 		} else if(max_rt == TRUE){
-				/* Maximum number of retransmissions has been reached */
-
 				// Clear the flag
 				// [WARNING] technically, it is not a success because ACK was never provided by any RX device
 				uint8_t holder = 0b1 << NRF24_REG_STATUS_MAX_RT_Pos;
@@ -432,7 +475,7 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 				cmd = FLUSH_TX;
 				nrf24_sendStandaloneCmd(cmd);
 
-				return 1;
+				return 2;
 		}
 	}
 
@@ -441,12 +484,12 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 }
 
 /*
- * nrf24_Receive - Reads data from the NRF24l01+ module in the polling SPI manner
+ * nrf24_Receive - Reads data with dynamic length from the NRF24l01+ module in the polling SPI manner
  *
  * nrf24_config_t @nrf24_config: structure with the NRF24 configurations 
  * uint8_t @rx_buffer: RX buffer of size == nrf24_config->data_width
  *
- * @return uint8_t: success flag, 1 = success, 0 = failure
+ * @return uint8_t: size of the payload being received, >1 = success, 0 = failure
  */
  uint8_t nrf24_Receive(nrf24_config_t *nrf24_config, uint8_t *rx_buffer){
 	/* Check if data is availabe in the specified pipe */
@@ -454,26 +497,32 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *data){
 		return 0;
 	}
 
-	/* Receive data */
-	// Select the NRF24 module
-	NSS_Select();
+	uint8_t rx_buffer_size = 32;
+	uint8_t cmd;
 
-	// Send the "read rx payload" command
-	uint8_t cmd = R_RX_PAYLOAD;
-	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
-	} 
+	/* Request the size of the payload if ShockBurst is enabled*/
+	if( nrf24_config->en_aa != NRF24_REG_EN_AA_ENAA_Px_Val_DISABLE &&
+		  nrf24_config->arc != NRF24_REG_SETUP_RETR_ARC_Val_DISABLE  ){
+		// Reques the size
+		cmd = R_RX_PL_WID;
+		nrf24_sendCmd_Receive(cmd, &rx_buffer_size, 1);
+		
+		// Quick sanity check 
+		if( rx_buffer_size > 32 ){
+			// Since the max payload size is 32 bytes, the packet contains erros and must be discarded
+			cmd = FLUSH_RX;
+			nrf24_sendStandaloneCmd(cmd);
 
-	// Retrieve the data from the buffer
-	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, rx_buffer, nrf24_config->data_width, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+			return 0;
+		}
 	}
 
-	// Deselect the NRF24 module
-	NSS_Deselect();
+	/* Receive data */
+	cmd = R_RX_PAYLOAD;
+	nrf24_sendCmd_Receive(cmd, rx_buffer, rx_buffer_size);
 
 	// Give the SPI transmission idle time to separate commands for the NRF24 module by keeping the NSS pin HIGH for 1micro sec
 	HAL_Delay(1);
 
-	return 1;
+	return rx_buffer_size;
  }

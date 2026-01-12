@@ -1,5 +1,5 @@
 # NRF24L01 
-Configurable driver with Interrupt handling, error handling, optional asserts for the STM32F407G-Disc1 board. The driver is easy to modify to make it compatible with other STM32 boards. Only one pipe RX is employed.
+Configurable driver with Interrupt handling, dynamic payload size, error handling, optional asserts for the STM32F407G-Disc1 board. The driver is easy to modify to make it compatible with other STM32 boards. Only one pipe RX is employed.
 
 ## Initial setup
 ### Clock
@@ -24,6 +24,9 @@ Configurable driver with Interrupt handling, error handling, optional asserts fo
 - Common ground
 
 ## Notes
+### ShockBurst
+- ShockBurst feature provides reliable frameworkd for ACKing and dynamic payload size (DPL).
+- In accordance with the NRF24L01+ documentation, to enable ShockBurst, set nrf24_config->EN_AA to NRF24_REG_EN_AA_ENAA_Px_Val_ENABLE and nrf24_config->ARC to anything but NRF24_REG_SETUP_RETR_ARC_Val_DISABLE during the peripheral initialization.
 ### ACKing
 - Auto-Acknowledgement can be enabled/disabled in the config struct
 ### RX
