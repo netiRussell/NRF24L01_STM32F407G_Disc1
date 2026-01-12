@@ -46,6 +46,7 @@ typedef struct {
 /* ----------------------------------------------------------- */
 /* ---------------- Functions declarations ------------------- */
 /* ----------------------------------------------------------- */
+void NRF24_centralized_errorHandler( uint8_t code );
 void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size );
 void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size );
 void nrf24_sendStandaloneCmd( uint8_t cmd );
@@ -71,6 +72,11 @@ uint8_t nrf24_Receive( nrf24_config_t *nrf24_config, uint8_t *rx_buffer );
 #define FALSE           0b00u
 #define TRUE            0b01u
 #define PARTIAL_TRUE    0b10u
+
+// ERROR codes
+#define NRF24_HAL_STANDARD_ERROR_HANDLER  0b000u
+#define NRF24_HAL_ERROR 					0b001u
+#define NRF24_ASSERT_ERROR 				0b010u
 
 
 /* ----------------------------------------------------------- */

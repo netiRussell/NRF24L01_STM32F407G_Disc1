@@ -12,6 +12,14 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 
+
+// User-defined error handler that overwrites the weak function provided by the driver
+void NRF24_centralized_errorHandler( uint8_t code ){
+  __disable_irq();
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
+  while (1){}
+}
+
 /**
   * @brief  The application entry point.
   * @retval int
@@ -339,14 +347,7 @@ static void MX_GPIO_Init(void)
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-	  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, GPIO_PIN_SET);
-  }
-  /* USER CODE END Error_Handler_Debug */
+	NRF24_centralized_errorHandler( NRF24_HAL_STANDARD_ERROR_HANDLER );
 }
 
 #ifdef  USE_FULL_ASSERT

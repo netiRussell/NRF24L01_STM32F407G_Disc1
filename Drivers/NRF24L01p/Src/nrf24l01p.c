@@ -11,52 +11,40 @@
 #include "../Inc/nrf24l01p.h"
 
 
-/* --- Local functions --- */
+/* --- Error Handlers --- */
 static void custom_assert( int result );
-static void centralized_errorHandler();
-static void CE_Disable( void );
-static void CE_Enable( void );
-static void NSS_Select( void );
-static void NSS_Deselect( void );
 
 /*
-* [WARNING] - this function might utilize serial output!
-* NRF24_assert - NRF24, STM32F407G-Disc1 specific assert functions that checks if an expression is correct
-* In case, the expression is False, NRF24_centralized_errorHandler is invoked.
+* NRF24_NRF24_centralized_errorHandler - Error handler invoked by the NRF24_assert function and HAL errors.
+* [NOTE] - this function is meant to be overwritten by the user
+*
+* uint8_t @code: error-code to distinguish error sources
+*
+* @return: void
+*/
+void __attribute__((weak)) NRF24_centralized_errorHandler( uint8_t code ) {
+	// default: do nothing
+	while(1) {}
+}
+
+/*
+* NRF24_assert - NRF24 assert functions that checks if an expression is correct
 *
 * @return: void
 */
 #ifdef NRF24_USE_ASSERTS 
 static void custom_assert( int result ){
 	if(result == FALSE){
-		// TODO: send line number of the code or some other info to be printed out
-		centralized_errorHandler();	
+		NRF24_centralized_errorHandler( NRF24_ASSERT_ERROR );
 	}
 }
 #endif
 
-/*
-* [WARNING] - this function utilizes serial output!
-* NRF24_centralized_errorHandler - Centralized error handler that is invoked by the NRF24_assert function
-* Default beahvior: system outputs error-specific information and flashes the red LED.
-*  
-* @return: void 
-*/
-/*
-static void centralized_errorHandler(UART_HandleTypeDef huart, uint8_t *error_msg, uint8_t msg_size) {
-	// TODO: to be implemented
-	if( HAL_UART_Transmit(&huart, error_msg, msg_size, HAL_MAX_DELAY) != HAL_OK){
-		Error_Handler();
-	}
-} */
-
-// TODO: Dummy handler, to be substituted with the one that takes in function to be invoked with the corresponding error code pass to it
-static void centralized_errorHandler() {
-	uint8_t dummy = 0;
-	for(uint8_t i = 0; i < 3; i++){
-		dummy++;
-	}	
-}
+/* --- Local functions --- */
+static void CE_Disable( void );
+static void CE_Enable( void );
+static void NSS_Select( void );
+static void NSS_Deselect( void );
 
 
 /*
@@ -108,12 +96,12 @@ void nrf24_writeReg( uint8_t reg, uint8_t* data, uint8_t size ){
 
 	// Transmit register address over the SPI
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Transmit data over the SPI
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, data, size, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 	
 	// Release NRF24
@@ -135,12 +123,12 @@ void nrf24_readReg( uint8_t reg, uint8_t* buffer, uint8_t size ){
 
 	// Request data from the register
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &reg, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Store the received data in the buffer
 	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, buffer, size, 1000) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 	
 	// Release NRF24
@@ -160,7 +148,7 @@ void nrf24_sendStandaloneCmd( uint8_t cmd ){
 
 	// Request data from the register
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Release NRF24
@@ -182,12 +170,12 @@ void nrf24_sendCmd_Receive( uint8_t cmd, uint8_t *response_buffer, uint8_t respo
 
 	// Send the command
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	} 
 
 	// Send dummy TX to provide the CLK for the NRF24's response
 	if( HAL_SPI_Receive( &NRF24_SPI_HANDLER, response_buffer, response_size, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Deselect the NRF24 module
@@ -208,7 +196,7 @@ uint8_t nrf24_get_status_with_nop(){
 
 	// Send a NOP and save the data
 	if( HAL_SPI_TransmitReceive( &NRF24_SPI_HANDLER, &cmd, &status_buffer, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Release NRF24
@@ -427,12 +415,12 @@ uint8_t nrf24_Transmit(nrf24_config_t* nrf24_config, uint8_t *tx_buffer, uint8_t
 	// Send the "write tx payload" command
 	uint8_t cmd = W_TX_PAYLOAD;
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, &cmd, 1, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Send the data
 	if( HAL_SPI_Transmit( &NRF24_SPI_HANDLER, tx_buffer, data_size, 1000 ) != HAL_OK ){
-		centralized_errorHandler();
+		NRF24_centralized_errorHandler(NRF24_HAL_ERROR);
 	}
 
 	// Deselect the NRF24 module
